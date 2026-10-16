@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Controle de Estoque Pro (Nuvem)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <div id="loginOverlay" class="fixed inset-0 bg-slate-900 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center space-y-6 border border-slate-100">
+            <div class="inline-flex bg-indigo-100 text-indigo-600 p-4 rounded-2xl">
+                <i class="fa-solid fa-lock text-3xl"></i>
+            </div>
+            <div>
+                <h2 class="text-2xl font-bold text-slate-800">Acesso Restrito</h2>
+                <p class="text-sm text-slate-500 mt-1">Digite a senha de acesso para visualizar e gerenciar o estoque.</p>
+            </div>
+            <form onsubmit="handleLogin(event)" class="space-y-4">
+                <div>
+                    <input type="password" id="accessPassword" placeholder="Digite a senha..." required
+                        class="w-full px-4 py-3 border border-slate-200 rounded-xl text-center text-lg font-semibold tracking-widest focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+                <p id="loginError" class="text-xs text-rose-500 font-medium hidden">
+                    <i class="fa-solid fa-circle-exclamation mr-1"></i> Senha incorreta! Tente novamente.
+                </p>
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl shadow transition duration-200 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-key"></i> Entrar no Sistema
+                </button>
+            </form>
+            <p class="text-xs text-slate-400">Acesso Restrito à Equipe Autorizada</p>
+        </div>
+    </div>
+
+    <header class="bg-indigo-600 text-white shadow-md">
+        <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="bg-indigo-700 p-2.5 rounded-xl shadow-inner">
+                    <i class="fa-solid fa-cloud-arrow-up text-2xl"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-xl sm:text-2xl font-bold tracking-tight">EstoquePro</h1>
+                        <span id="cloudStatus" class="bg-indigo-500 text-indigo-100 text-xs px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <i class="fa-solid fa-spinner fa-spin text-xs"></i> Conectando...
+                        </span>
+                    </div>
+                    <p class="text-indigo-200 text-xs sm:text-sm">Gerenciamento inteligente de peças e suprimentos em nuvem</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3 w-full sm:w-auto justify-end flex-wrap">
+                <button onclick="switchTab('inventory')" id="tabBtnInventory" class="bg-indigo-700 text-white font-semibold px-4 py-2.5 rounded-xl shadow transition duration-200 flex items-center gap-2 text-sm">
+                    <i class="fa-solid fa-boxes-stacked"></i> Estoque
+                </button>
+                <button onclick="switchTab('history')" id="tabBtnHistory" class="bg-indigo-800 hover:bg-indigo-700 text-indigo-100 font-semibold px-4 py-2.5 rounded-xl transition duration-200 flex items-center gap-2 text-sm">
+                    <i class="fa-solid fa-clock-rotate-left"></i> Histórico
+                </button>
+                <button onclick="openModal('itemModal')" class="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold px-4 py-2.5 rounded-xl shadow transition duration-200 flex items-center gap-2 text-sm">
+                    <i class="fa-solid fa-plus"></i> Novo Item
+                </button>
+                <button onclick="downloadCodeFile()" class="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold px-3 py-2.5 rounded-xl shadow transition duration-200 flex items-center gap-2 text-sm" title="Baixar Arquivo do Sistema (index.html)">
+                    <i class="fa-solid fa-file-arrow-down"></i> Baixar App
+                </button>
+                <button onclick="logout()" class="bg-indigo-800 hover:bg-indigo-900 text-rose-200 hover:text-white px-3 py-2.5 rounded-xl text-sm transition duration-200 flex items-center gap-1.5" title="Sair da Conta">
+                    <i class="fa-solid fa-right-from-bracket"></i> Sair
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 py-6 sm:px-6 lg:px-8 space-y-6">
+        
+        <!-- Inventory Tab View -->
+        <div id="inventoryView" class="space-y-6">
+            <!-- Low Stock Alert Banner (Dynamic) -->
+            <div id="alertBanner" class="hidden bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-xl shadow-sm flex items-start justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fa-solid fa-triangle-exclamation text-amber-500 text-xl mt-0.5"></i>
+                    <div>
+                        <h3 class="font-semibold text-amber-800">Atenção: Itens com Estoque Baixo!</h3>
+                        <p id="alertText" class="text-sm text-amber-700">Existem itens atingindo ou abaixo do limite mínimo configurado.</p>
+                    </div>
+                </div>
+                <button onclick="filterLowStock()" class="text-xs bg-amber-200 hover:bg-amber-300 text-amber-900 font-medium px-3 py-1.5 rounded-lg transition">
+                    Ver Filtrados
+                </button>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-slate-500">Total de Itens Cadastrados</p>
+                        <h3 id="statTotalItems" class="text-2xl font-bold text-slate-900 mt-1">0</h3>
+                    </div>
+                    <div class="bg-blue-50 text-blue-600 p-3.5 rounded-xl">
+                        <i class="fa-solid fa-box text-xl"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-slate-500">Estoque Normal</p>
+                        <h3 id="statNormalStock" class="text-2xl font-bold text-emerald-600 mt-1">0</h3>
+                    </div>
+                    <div class="bg-emerald-50 text-emerald-600 p-3.5 rounded-xl">
+                        <i class="fa-solid fa-circle-check text-xl"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-slate-500">Estoque Baixo</p>
+                        <h3 id="statLowStock" class="text-2xl font-bold text-amber-600 mt-1">0</h3>
+                    </div>
+                    <div class="bg-amber-50 text-amber-600 p-3.5 rounded-xl">
+                        <i class="fa-solid fa-triangle-exclamation text-xl"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-slate-500">Valor Total Estimado</p>
+                        <h3 id="statTotalValue" class="text-2xl font-bold text-slate-900 mt-1">R$ 0,00</h3>
+                    </div>
+                    <div class="bg-indigo-50 text-indigo-600 p-3.5 rounded-xl">
+                        <i class="fa-solid fa-wallet text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <!-- Table Header / Toolbar -->
+                <div class="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <div class="w-full sm:w-72 relative">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                            <i class="fa-solid fa-search"></i>
+                        </span>
+                        <input type="text" id="searchInput" oninput="renderTable()" placeholder="Buscar por nome ou SKU..." 
+                            class="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+                        <select id="filterCategory" onchange="renderTable()" class="border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">Todas Categorias</option>
+                        </select>
+                        <select id="filterStatus" onchange="renderTable()" class="border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">Todos Status</option>
+                            <option value="normal">Normal</option>
+                            <option value="low">Estoque Baixo</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Table -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-500 text-xs uppercase font-semibold tracking-wider">
+                                <th class="py-3 px-4 sm:px-6">Código / Peça</th>
+                                <th class="py-3 px-4">Categoria</th>
+                                <th class="py-3 px-4 text-center">Qtd Atual</th>
+                                <th class="py-3 px-4 text-center">Qtd Mínima</th>
+                                <th class="py-3 px-4 text-right">Preço Unit.</th>
+                                <th class="py-3 px-4 text-center">Status</th>
+                                <th class="py-3 px-4 text-center">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventoryTableBody" class="divide-y divide-slate-100 text-sm">
+                            <!-- Dynamically populated rows -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Empty State -->
+                <div id="emptyState" class="hidden py-16 text-center">
+                    <div class="text-slate-300 text-5xl mb-3">
+                        <i class="fa-solid fa-box-open"></i>
+                    </div>
+                    <p class="text-slate-500 font-medium">Nenhum item encontrado no estoque.</p>
+                    <p class="text-slate-400 text-xs mt-1">Clique em "Novo Item" para começar a cadastrar.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- History Tab View -->
+        <div id="historyView" class="hidden space-y-6">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div class="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <div class="flex items-center gap-3 w-full sm:w-auto">
+                        <div class="w-full sm:w-72 relative">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                                <i class="fa-solid fa-search"></i>
+                            </span>
+                            <input type="text" id="historySearchInput" oninput="renderHistoryTable()" placeholder="Buscar por nome do produto ou SKU..." 
+                                class="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+                        <button onclick="clearHistory()" class="bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold px-3 py-2 rounded-xl text-xs transition duration-200 flex items-center gap-1.5">
+                            <i class="fa-solid fa-trash"></i> Limpar Histórico
+                        </button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-500 text-xs uppercase font-semibold tracking-wider">
+                                <th class="py-3 px-4 sm:px-6">Data / Hora</th>
+                                <th class="py-3 px-4">Item (SKU)</th>
+                                <th class="py-3 px-4 text-center">Ação</th>
+                                <th class="py-3 px-4 text-center">Qtd / Alteração</th>
+                                <th class="py-3 px-4">Motivo / Observação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody" class="divide-y divide-slate-100 text-sm">
+                            <!-- Dynamically populated history -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="historyEmptyState" class="hidden py-16 text-center">
+                    <div class="text-slate-300 text-5xl mb-3">
+                        <i class="fa-solid fa-clock-rotate-left"></i>
+                    </div>
+                    <p class="text-slate-500 font-medium">Nenhum registro de movimentação encontrado.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal: Add / Edit Item -->
+    <div id="itemModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden animate-in fade-in zoom-in duration-150">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 id="modalTitle" class="font-bold text-slate-800 text-lg">Novo Item no Estoque</h3>
+                <button onclick="closeModal('itemModal')" class="text-slate-400 hover:text-slate-600 text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <form id="itemForm" onsubmit="saveItem(event)" class="p-6 space-y-4">
+                <input type="hidden" id="itemId">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Nome da Peça / Item *</label>
+                        <input type="text" id="itemName" required placeholder="Ex: Rolamento 6204" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Código / SKU *</label>
+                        <input type="text" id="itemSku" required placeholder="Ex: ROL-6204" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Categoria *</label>
+                        <input type="text" id="itemCategory" required placeholder="Ex: Mecânica, Elétrica" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Preço Unitário (R$) *</label>
+                        <input type="number" step="0.01" min="0" id="itemPrice" required placeholder="0,00" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Quantidade Inicial *</label>
+                        <input type="number" min="0" id="itemQty" required placeholder="0" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Estoque Mínimo *</label>
+                        <input type="number" min="0" id="itemMinQty" required placeholder="0" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Observações / Localização</label>
+                    <textarea id="itemNotes" rows="2" placeholder="Prateleira A-3, fornecedor X..." class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"></textarea>
+                </div>
+
+                <div class="flex justify-end space-x-3 pt-3">
+                    <button type="button" onclick="closeModal('itemModal')" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-xl transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-xl shadow transition">
+                        Salvar Item
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Stock Movement -->
+    <div id="movementModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-150">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 id="movementModalTitle" class="font-bold text-slate-800 text-lg">Movimentação de Estoque</h3>
+                <button onclick="closeModal('movementModal')" class="text-slate-400 hover:text-slate-600 text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <form id="movementForm" onsubmit="saveMovement(event)" class="p-6 space-y-4">
+                <input type="hidden" id="movItemId">
+                <input type="hidden" id="movType">
+                
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <p class="text-xs text-slate-500">Item selecionado:</p>
+                    <p id="movItemName" class="font-bold text-slate-800 text-base"></p>
+                    <p class="text-xs text-slate-600 mt-1">Quantidade atual: <span id="movItemCurrentQty" class="font-semibold"></span></p>
+                </div>
+
+                <div>
+                    <label id="movQtyLabel" class="block text-xs font-semibold text-slate-600 uppercase mb-1">Quantidade a Utilizar *</label>
+                    <input type="number" min="1" id="movQty" required placeholder="Ex: 2" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Motivo / Observação</label>
+                    <input type="text" id="movReason" placeholder="Ex: Manutenção máquina 04, Reposição..." class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+
+                <div class="flex justify-end space-x-3 pt-3">
+                    <button type="button" onclick="closeModal('movementModal')" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-xl transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" id="movSubmitBtn" class="px-4 py-2 text-white text-sm font-medium rounded-xl shadow transition">
+                        Confirmar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-3">
+        <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400"></i>
+        <span id="toastMessage" class="text-sm font-medium">Operação realizada com sucesso!</span>
+    </div>
+
+    <footer class="bg-white border-t border-slate-100 py-4 text-center text-xs text-slate-400 mt-auto">
+        EstoquePro Cloud &bull; Sincronização em tempo real para toda a equipe
+    </footer>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Configuration and Auth
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "demo",
+            authDomain: "demo.firebaseapp.com",
+            projectId: "demo",
+            storageBucket: "demo.appspot.com",
+            messagingSenderId: "00000000000",
+            appId: "1:00000000000:web:00000000000"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let inventory = [];
+        let historyLogs = [];
+        let isAuthReady = false;
+
+        const defaultItems = [
+            { id: '1', name: 'Rolamento 6204', sku: 'ROL-6204', category: 'Mecânica', price: 28.50, qty: 3, minQty: 5, notes: 'Prateleira A1' },
+            { id: '2', name: 'Correia em V A-38', sku: 'COR-A38', category: 'Transmissão', price: 45.00, qty: 12, minQty: 4, notes: 'Almoxarifado central' },
+            { id: '3', name: 'Controlador de Temperatura', sku: 'EL-TC1', category: 'Elétrica', price: 180.00, qty: 2, minQty: 2, notes: 'Painel principal' },
+            { id: '4', name: 'Óleo Lubrificante ISO 68 (L)', sku: 'OLEO-68', category: 'Lubrificantes', price: 22.00, qty: 25, minQty: 10, notes: 'Galão 20L' },
+            { id: '5', name: 'Fusível 10A Rápido', sku: 'FUS-10A', category: 'Elétrica', price: 4.50, qty: 1, minQty: 15, notes: 'Gaveta 4' }
+        ];
+
+        // Authenticate & Load Real-time Data
+        async function initCloud() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                isAuthReady = true;
+
+                const statusEl = document.getElementById('cloudStatus');
+                if (statusEl) {
+                    statusEl.className = 'bg-emerald-500 text-white text-xs px-2.5 py-0.5 rounded-full flex items-center gap-1 font-medium';
+                    statusEl.innerHTML = '<i class="fa-solid fa-cloud text-xs"></i> Nuvem Conectada';
+                }
+
+                // Listen to Inventory collection in Cloud
+                const inventoryColRef = collection(db, 'artifacts', appId, 'public', 'data', 'inventory');
+                onSnapshot(inventoryColRef, (snapshot) => {
+                    if (snapshot.empty && inventory.length === 0) {
+                        // Seed default items if cloud collection is empty
+                        defaultItems.forEach(item => {
+                            setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', item.id), item);
+                        });
+                    } else {
+                        inventory = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        window.inventory = inventory;
+                        window.updateCategoryDropdown();
+                        window.renderTable();
+                        window.updateStats();
+                    }
+                }, (err) => {
+                    console.error("Erro ao sincronizar estoque:", err);
+                });
+
+                // Listen to History collection in Cloud
+                const historyColRef = collection(db, 'artifacts', appId, 'public', 'data', 'history');
+                onSnapshot(historyColRef, (snapshot) => {
+                    historyLogs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    // Sort history newest first
+                    historyLogs.sort((a, b) => new Date(b.date) - new Date(a.date));
+                    window.historyLogs = historyLogs;
+                    window.renderHistoryTable();
+                }, (err) => {
+                    console.error("Erro ao sincronizar histórico:", err);
+                });
+
+            } catch (err) {
+                console.error("Erro na autenticação nuvem:", err);
+                const statusEl = document.getElementById('cloudStatus');
+                if (statusEl) {
+                    statusEl.className = 'bg-rose-500 text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1';
+                    statusEl.innerHTML = '<i class="fa-solid fa-cloud-bolt text-xs"></i> Offline';
+                }
+            }
+        }
+
+        // Global functions mapped to window for HTML handlers
+        window.saveItemCloud = async function(itemData) {
+            if (!isAuthReady) return;
+            const docId = itemData.id || Date.now().toString();
+            itemData.id = docId;
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', docId), itemData);
+        };
+
+        window.deleteItemCloud = async function(id) {
+            if (!isAuthReady) return;
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', id));
+        };
+
+        window.addHistoryCloud = async function(logData) {
+            if (!isAuthReady) return;
+            const docId = logData.id || Date.now().toString();
+            logData.id = docId;
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'history', docId), logData);
+        };
+
+        window.clearHistoryCloud = async function() {
+            if (!isAuthReady) return;
+            historyLogs.forEach(async (log) => {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'history', log.id));
+            });
+        };
+
+        // Start initialization
+        initCloud();
+    </script>
+
+    <script>
+        window.inventory = [];
+        window.historyLogs = [];
+
+        const SYSTEM_PASSWORD = "NA2217"; // Senha atualizada de acesso ao sistema
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const pwdInput = document.getElementById('accessPassword').value;
+            const errorEl = document.getElementById('loginError');
+            if (pwdInput === SYSTEM_PASSWORD) {
+                document.getElementById('loginOverlay').classList.add('hidden');
+                sessionStorage.setItem('estoque_auth', 'true');
+                errorEl.classList.add('hidden');
+            } else {
+                errorEl.classList.remove('hidden');
+            }
+        }
+
+        function checkAuthSession() {
+            if (sessionStorage.getItem('estoque_auth') === 'true') {
+                document.getElementById('loginOverlay')?.classList.add('hidden');
+            }
+        }
+
+        function logout() {
+            sessionStorage.removeItem('estoque_auth');
+            location.reload();
+        }
+
+        window.addEventListener('DOMContentLoaded', checkAuthSession);
+
+        // Category dropdown update
+        window.updateCategoryDropdown = function() {
+            const filterCategory = document.getElementById('filterCategory');
+            if (!filterCategory) return;
+            const currentSelected = filterCategory.value;
+            const categories = [...new Set(window.inventory.map(i => i.category))].filter(Boolean);
+            
+            filterCategory.innerHTML = '<option value="">Todas Categorias</option>';
+            categories.forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = cat;
+                opt.textContent = cat;
+                if (cat === currentSelected) opt.selected = true;
+                filterCategory.appendChild(opt);
+            });
+        };
+
+        // Render Inventory Table
+        window.renderTable = function() {
+            const tbody = document.getElementById('inventoryTableBody');
+            const emptyState = document.getElementById('emptyState');
+            const search = (document.getElementById('searchInput')?.value || '').toLowerCase();
+            const categoryFilter = document.getElementById('filterCategory')?.value || '';
+            const statusFilter = document.getElementById('filterStatus')?.value || '';
+
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            const filtered = window.inventory.filter(item => {
+                const matchesSearch = item.name.toLowerCase().includes(search) || 
+                                      item.sku.toLowerCase().includes(search);
+                const matchesCategory = categoryFilter === '' || item.category === categoryFilter;
+                const isLow = item.qty <= item.minQty;
+                const matchesStatus = statusFilter === '' || 
+                                      (statusFilter === 'low' && isLow) || 
+                                      (statusFilter === 'normal' && !isLow);
+
+                return matchesSearch && matchesCategory && matchesStatus;
+            });
+
+            if (filtered.length === 0) {
+                emptyState?.classList.remove('hidden');
+            } else {
+                emptyState?.classList.add('hidden');
+                filtered.forEach(item => {
+                    const isLow = item.qty <= item.minQty;
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-slate-50/80 transition duration-150';
+
+                    const statusBadge = isLow 
+                        ? `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Baixo</span>`
+                        : `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800"><i class="fa-solid fa-check mr-1"></i> Normal</span>`;
+
+                    tr.innerHTML = `
+                        <td class="py-3 px-4 sm:px-6">
+                            <div class="font-bold text-slate-800">${escapeHtml(item.name)}</div>
+                            <div class="text-xs text-slate-400 font-mono">${escapeHtml(item.sku)}</div>
+                        </td>
+                        <td class="py-3 px-4 text-slate-600">${escapeHtml(item.category)}</td>
+                        <td class="py-3 px-4 text-center font-bold text-slate-800">${item.qty}</td>
+                        <td class="py-3 px-4 text-center text-slate-500">${item.minQty}</td>
+                        <td class="py-3 px-4 text-right font-mono text-slate-700">R$ ${Number(item.price).toFixed(2)}</td>
+                        <td class="py-3 px-4 text-center">${statusBadge}</td>
+                        <td class="py-3 px-4 text-center">
+                            <div class="flex items-center justify-center space-x-1">
+                                <button onclick="openMovementModal('${item.id}', 'use')" class="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs" title="Dar Baixa (Usar)">
+                                    <i class="fa-solid fa-minus"></i>
+                                </button>
+                                <button onclick="openMovementModal('${item.id}', 'add')" class="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg text-xs" title="Adicionar Estoque">
+                                    <i class="fa-solid fa-plus"></i>
+                                </button>
+                                <button onclick="editItem('${item.id}')" class="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs" title="Editar Peça">
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                                <button onclick="deleteItem('${item.id}')" class="p-1.5 bg-slate-100 hover:bg-rose-100 text-rose-600 rounded-lg text-xs" title="Excluir Peça">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            window.updateStats();
+        };
+
+        // Update Stats Dashboard Cards
+        window.updateStats = function() {
+            const totalItemsEl = document.getElementById('statTotalItems');
+            const normalStockEl = document.getElementById('statNormalStock');
+            const lowStockEl = document.getElementById('statLowStock');
+            const totalValueEl = document.getElementById('statTotalValue');
+            const alertBanner = document.getElementById('alertBanner');
+
+            let lowCount = 0;
+            let normalCount = 0;
+            let totalValue = 0;
+
+            window.inventory.forEach(item => {
+                if (item.qty <= item.minQty) {
+                    lowCount++;
+                } else {
+                    normalCount++;
+                }
+                totalValue += (item.qty * item.price);
+            });
+
+            if (totalItemsEl) totalItemsEl.textContent = window.inventory.length;
+            if (normalStockEl) normalStockEl.textContent = normalCount;
+            if (lowStockEl) lowStockEl.textContent = lowCount;
+            if (totalValueEl) totalValueEl.textContent = `R$ ${totalValue.toFixed(2)}`;
+
+            if (alertBanner) {
+                if (lowCount > 0) {
+                    alertBanner.classList.remove('hidden');
+                } else {
+                    alertBanner.classList.add('hidden');
+                }
+            }
+        };
+
+        // Render History Table
+        window.renderHistoryTable = function() {
+            const search = (document.getElementById('historySearchInput')?.value || '').toLowerCase();
+            const tbody = document.getElementById('historyTableBody');
+            const emptyState = document.getElementById('historyEmptyState');
+
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            const filtered = window.historyLogs.filter(log => {
+                const nameMatch = log.itemName && log.itemName.toLowerCase().includes(search);
+                const skuMatch = log.itemSku && log.itemSku.toLowerCase().includes(search);
+                return nameMatch || skuMatch;
+            });
+
+            if (filtered.length === 0) {
+                emptyState?.classList.remove('hidden');
+            } else {
+                emptyState?.classList.add('hidden');
+                filtered.forEach(log => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-slate-50/80 transition duration-150';
+
+                    let actionBadge = '';
+                    if (log.action === 'BAIXA') {
+                        actionBadge = '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-800"><i class="fa-solid fa-arrow-down mr-1"></i> Baixa</span>';
+                    } else if (log.action === 'ENTRADA') {
+                        actionBadge = '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800"><i class="fa-solid fa-arrow-up mr-1"></i> Entrada</span>';
+                    } else if (log.action === 'CADASTRO') {
+                        actionBadge = '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"><i class="fa-solid fa-plus mr-1"></i> Criado</span>';
+                    } else if (log.action === 'EDIÇÃO') {
+                        actionBadge = '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800"><i class="fa-solid fa-pen mr-1"></i> Editado</span>';
+                    } else if (log.action === 'EXCLUSÃO') {
+                        actionBadge = '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800"><i class="fa-solid fa-trash mr-1"></i> Excluído</span>';
+                    }
+
+                    const dateObj = new Date(log.date);
+                    const formattedDate = dateObj.toLocaleDateString('pt-BR') + ' ' + dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+                    tr.innerHTML = `
+                        <td class="py-3 px-4 sm:px-6 text-slate-500 font-mono text-xs">${formattedDate}</td>
+                        <td class="py-3 px-4">
+                            <div class="font-semibold text-slate-800">${escapeHtml(log.itemName)}</div>
+                            <div class="text-xs text-slate-400 font-mono">${escapeHtml(log.itemSku || '-')}</div>
+                        </td>
+                        <td class="py-3 px-4 text-center">${actionBadge}</td>
+                        <td class="py-3 px-4 text-center font-bold ${log.qtyChange < 0 ? 'text-rose-600' : log.qtyChange > 0 ? 'text-emerald-600' : 'text-slate-400'}">
+                            ${log.qtyChange > 0 ? '+' + log.qtyChange : log.qtyChange === 0 ? '-' : log.qtyChange}
+                        </td>
+                        <td class="py-3 px-4 text-slate-600">${escapeHtml(log.reason || '-')}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+        };
+
+        // Modal Helpers
+        function openModal(id) {
+            if (id === 'itemModal') {
+                document.getElementById('itemForm').reset();
+                document.getElementById('itemId').value = '';
+                document.getElementById('modalTitle').textContent = 'Novo Item no Estoque';
+            }
+            document.getElementById(id)?.classList.remove('hidden');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id)?.classList.add('hidden');
+        }
+
+        function filterLowStock() {
+            const filterStatus = document.getElementById('filterStatus');
+            if (filterStatus) {
+                filterStatus.value = 'low';
+                window.renderTable();
+            }
+        }
+
+        function editItem(id) {
+            const item = window.inventory.find(i => i.id === id);
+            if (!item) return;
+
+            document.getElementById('itemId').value = item.id;
+            document.getElementById('itemName').value = item.name;
+            document.getElementById('itemSku').value = item.sku;
+            document.getElementById('itemCategory').value = item.category;
+            document.getElementById('itemPrice').value = item.price;
+            document.getElementById('itemQty').value = item.qty;
+            document.getElementById('itemMinQty').value = item.minQty;
+            document.getElementById('itemNotes').value = item.notes || '';
+            document.getElementById('modalTitle').textContent = 'Editar Item do Estoque';
+
+            openModal('itemModal');
+        }
+
+        function openMovementModal(id, type) {
+            const item = window.inventory.find(i => i.id === id);
+            if (!item) return;
+
+            document.getElementById('movItemId').value = item.id;
+            document.getElementById('movType').value = type;
+            document.getElementById('movItemName').textContent = item.name;
+            document.getElementById('movItemCurrentQty').textContent = item.qty;
+            document.getElementById('movQty').value = '';
+            document.getElementById('movReason').value = '';
+
+            const title = document.getElementById('movementModalTitle');
+            const label = document.getElementById('movQtyLabel');
+            const submitBtn = document.getElementById('movSubmitBtn');
+
+            if (type === 'use') {
+                title.textContent = 'Dar Baixa no Estoque';
+                label.textContent = 'Quantidade a Utilizar *';
+                submitBtn.textContent = 'Confirmar Baixa';
+                submitBtn.className = 'px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-sm font-medium rounded-xl shadow transition';
+            } else {
+                title.textContent = 'Entrada / Reposição de Estoque';
+                label.textContent = 'Quantidade a Adicionar *';
+                submitBtn.textContent = 'Confirmar Entrada';
+                submitBtn.className = 'px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-xl shadow transition';
+            }
+
+            openModal('movementModal');
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            const toastIcon = document.getElementById('toastIcon');
+
+            if (!toast || !toastMessage || !toastIcon) return;
+
+            toastMessage.textContent = message;
+            if (type === 'warning') {
+                toastIcon.className = 'fa-solid fa-triangle-exclamation text-amber-400';
+            } else {
+                toastIcon.className = 'fa-solid fa-circle-check text-emerald-400';
+            }
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        function switchTab(tab) {
+            const invView = document.getElementById('inventoryView');
+            const histView = document.getElementById('historyView');
+            const btnInv = document.getElementById('tabBtnInventory');
+            const btnHist = document.getElementById('tabBtnHistory');
+
+            if (tab === 'inventory') {
+                invView.classList.remove('hidden');
+                histView.classList.add('hidden');
+                btnInv.className = 'bg-indigo-700 text-white font-semibold px-4 py-2.5 rounded-xl shadow transition duration-200 flex items-center gap-2 text-sm';
+                btnHist.className = 'bg-indigo-800 hover:bg-indigo-700 text-indigo-100 font-semibold px-4 py-2.5 rounded-xl transition duration-200 flex items-center gap-2 text-sm';
+            } else {
+                invView.classList.add('hidden');
+                histView.classList.remove('hidden');
+                btnInv.className = 'bg-indigo-800 hover:bg-indigo-700 text-indigo-100 font-semibold px-4 py-2.5 rounded-xl transition duration-200 flex items-center gap-2 text-sm';
+                btnHist.className = 'bg-indigo-700 text-white font-semibold px-4 py-2.5 rounded-xl shadow transition duration-200 flex items-center gap-2 text-sm';
+            }
+        }
+
+        async function saveItem(e) {
+            e.preventDefault();
+            const id = document.getElementById('itemId').value;
+            const name = document.getElementById('itemName').value;
+            const sku = document.getElementById('itemSku').value;
+            const category = document.getElementById('itemCategory').value;
+            const price = parseFloat(document.getElementById('itemPrice').value);
+            const qty = parseInt(document.getElementById('itemQty').value);
+            const minQty = parseInt(document.getElementById('itemMinQty').value);
+            const notes = document.getElementById('itemNotes').value;
+
+            const itemData = { name, sku, category, price, qty, minQty, notes };
+
+            if (id) {
+                itemData.id = id;
+                const oldItem = window.inventory.find(i => i.id === id);
+                const qtyDiff = oldItem ? qty - oldItem.qty : 0;
+                await window.saveItemCloud(itemData);
+                await window.addHistoryCloud({
+                    date: new Date().toISOString(),
+                    itemName: name,
+                    itemSku: sku,
+                    action: 'EDIÇÃO',
+                    qtyChange: qtyDiff,
+                    reason: 'Dados atualizados em nuvem'
+                });
+                showToast('Item atualizado com sucesso na nuvem!');
+            } else {
+                const newId = Date.now().toString();
+                itemData.id = newId;
+                await window.saveItemCloud(itemData);
+                await window.addHistoryCloud({
+                    date: new Date().toISOString(),
+                    itemName: name,
+                    itemSku: sku,
+                    action: 'CADASTRO',
+                    qtyChange: qty,
+                    reason: 'Item cadastrado no sistema'
+                });
+                showToast('Novo item cadastrado na nuvem!');
+            }
+
+            closeModal('itemModal');
+        }
+
+        async function deleteItem(id) {
+            const item = window.inventory.find(i => i.id === id);
+            if (confirm('Tem certeza que deseja remover este item do estoque?')) {
+                if (item) {
+                    await window.addHistoryCloud({
+                        date: new Date().toISOString(),
+                        itemName: item.name,
+                        itemSku: item.sku,
+                        action: 'EXCLUSÃO',
+                        qtyChange: -item.qty,
+                        reason: 'Item excluído do sistema'
+                    });
+                }
+                await window.deleteItemCloud(id);
+                showToast('Item removido com sucesso!');
+            }
+        }
+
+        async function saveMovement(e) {
+            e.preventDefault();
+            const id = document.getElementById('movItemId').value;
+            const type = document.getElementById('movType').value;
+            const amount = parseInt(document.getElementById('movQty').value);
+            const reason = document.getElementById('movReason').value;
+
+            const item = window.inventory.find(i => i.id === id);
+            if (!item) return;
+
+            let updatedQty = item.qty;
+            if (type === 'use') {
+                if (amount > item.qty) {
+                    showToast('Quantidade a utilizar é maior que o estoque atual!', 'warning');
+                    return;
+                }
+                updatedQty -= amount;
+                item.qty = updatedQty;
+                await window.saveItemCloud(item);
+                await window.addHistoryCloud({
+                    date: new Date().toISOString(),
+                    itemName: item.name,
+                    itemSku: item.sku,
+                    action: 'BAIXA',
+                    qtyChange: -amount,
+                    reason: reason || 'Uso / Baixa de material'
+                });
+                showToast(`Baixa de ${amount} unidade(s) confirmada!`);
+            } else {
+                updatedQty += amount;
+                item.qty = updatedQty;
+                await window.saveItemCloud(item);
+                await window.addHistoryCloud({
+                    date: new Date().toISOString(),
+                    itemName: item.name,
+                    itemSku: item.sku,
+                    action: 'ENTRADA',
+                    qtyChange: amount,
+                    reason: reason || 'Reposição de estoque'
+                });
+                showToast(`Adicionadas ${amount} unidade(s) com sucesso!`);
+            }
+
+            closeModal('movementModal');
+        }
+
+        async function clearHistory() {
+            if (confirm('Tem certeza de que deseja limpar todo o histórico na nuvem?')) {
+                await window.clearHistoryCloud();
+                showToast('Histórico zerado com sucesso!');
+            }
+        }
+
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(window.inventory, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `estoque_backup_${new Date().toISOString().slice(0,10)}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+            showToast('Backup do estoque baixado com sucesso!');
+        }
+
+        function downloadCodeFile() {
+            const htmlContent = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+            const blob = new Blob([htmlContent], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.href = url;
+            downloadAnchor.download = 'index.html';
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            document.body.removeChild(downloadAnchor);
+            URL.revokeObjectURL(url);
+            showToast('Arquivo index.html baixado para o seu computador!');
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
